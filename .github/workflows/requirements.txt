@@ -4,3 +4,4 @@ pandas
 numpy
 datetime
 streamlit_folium
+openpyxl
