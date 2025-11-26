@@ -3,3 +3,4 @@ folium
 pandas
 numpy
 datetime
+st_folium
