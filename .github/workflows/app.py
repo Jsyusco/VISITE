@@ -247,8 +247,8 @@ with col2:
     # 2. Fonction pour colorer la ligne référence en rouge clair
     def boldfirstlign(s):
         return 'font-weight: bold'
-    """def highlight_ref(s):
-        return ['background-color: #ffcccc' if s[REFERENCE_COL] == site_ref else '' for _ in s]"""
+   #def highlight_ref(s):
+       # return ['background-color: #ffcccc' if s[REFERENCE_COL] == site_ref else '' for _ in s]
 
     # Application des styles   """.apply(highlight_ref, axis=1)"""
     styled_df = (display_df.style
