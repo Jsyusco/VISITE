@@ -250,9 +250,9 @@ with col2:
     """def highlight_ref(s):
         return ['background-color: #ffcccc' if s[REFERENCE_COL] == site_ref else '' for _ in s]"""
 
-    # Application des styles   """.apply(boldfirstlign, axis=1)"""
+    # Application des styles   """.apply(highlight_ref, axis=1)"""
     styled_df = (display_df.style
-                 .apply(highlight_ref, axis=1)
+                 .apply(boldfirstlign, axis=1)
                  .map(style_green_date, subset=[col_date_ouv, col_date_trvx])
                  .format({'Distance_km': "{:.1f}"}))
 
