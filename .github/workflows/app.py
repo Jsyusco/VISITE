@@ -126,7 +126,7 @@ with st.sidebar:
 
     # C. Rayon et Tolérance
     rayon_km = st.slider("Rayon de recherche (km)", 1, 500, 50, 1)
-    tolerance_days = st.number_input("Tolérance (jours) +/-", min_value=1, value=5, step=1)
+    tolerance_days = st.number_input("Tolérance (jours calendaire) +/-", min_value=1, value=5, step=1)
 
     # Calcul de la fenêtre (objets datetime.date)
     date_min = visit_date - timedelta(days=tolerance_days)
@@ -246,7 +246,7 @@ with col2:
 
     # 2. Fonction pour colorer la ligne référence en rouge clair
     def boldfirstlign(s):
-        return ['font-weight: bold' if s[REFERENCE_COL] == site_ref else '' for _ in s]
+        return ['font-weight: extra bold' if s[REFERENCE_COL] == site_ref else '' for _ in s]
    #def highlight_ref(s):
        # return ['background-color: #ffcccc' if s[REFERENCE_COL] == site_ref else '' for _ in s]
 
