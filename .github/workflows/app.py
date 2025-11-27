@@ -30,7 +30,7 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 # --- 2. CONFIGURATION DE LA PAGE ---
 
 st.set_page_config(page_title="Site à visiter", layout="wide")
-st.title("📍 Localisation des Sites par Rayon")
+st.title("📍 Localisation des Sites")
 
 
 # --- 3. CHARGEMENT DES DONNÉES ---
@@ -40,7 +40,7 @@ with st.sidebar:
     uploaded_file = st.file_uploader("Charger votre fichier Excel", type=["xlsx", "xls"])
 
 if uploaded_file is None:
-    st.info("👋 Veuillez charger un fichier Excel (.xlsx) pour commencer.")
+    st.info("👋 Veuillez charger un fichier Excel (.xlsx)")
     st.stop()
 
 try:
@@ -89,7 +89,7 @@ with st.sidebar:
 
     # A. Sélection du site référence
     site_options = df[REFERENCE_COL].unique()
-    site_ref = st.selectbox("Choisir le site référence (Ref):", options=site_options)
+    site_ref = st.selectbox("Choisir le site référence :", options=site_options)
     
     # On récupère tout de suite la ligne du site sélectionné
     ref_row = df[df[REFERENCE_COL] == site_ref].iloc[0]
@@ -99,7 +99,7 @@ with st.sidebar:
     date_trvx_val = ref_row[col_date_trvx]
     
     st.markdown("---")
-    st.write("**Configuration de la Date de visite**")
+    st.write("**Sélection de la Date de visite**")
     
     # Choix de la source de date via un bouton Radio
     choix_date = st.radio(
@@ -121,7 +121,7 @@ with st.sidebar:
 
     # B. Le champ Date de visite (pré-rempli avec le choix ci-dessus)
     # Note: st.date_input retourne un objet 'date' (sans heure), mais pandas utilise des Timestamps
-    visit_date = st.date_input("Date de visite souhaitée", value=default_date)
+    visit_date = st.date_input("Sélectionner une autre date", value=default_date)
     st.markdown("---")
 
     # C. Rayon et Tolérance
@@ -222,7 +222,7 @@ with col2:
         st.info("🤷‍♂️ Aucun site voisin n'est éligible (distance et date).")
     
     st.markdown("---")
-    st.subheader("Détail du filtrage et mise en évidence")
+    st.subheader("Détail des sites à proximité")
 
     # Affichage personnalisé (on retire la colonne technique 'Eligible_Date')
     cols_base = [REFERENCE_COL, 'Distance_km', col_date_ouv, col_date_trvx]
@@ -245,8 +245,10 @@ with col2:
         return ''
 
     # 2. Fonction pour colorer la ligne référence en rouge clair
-    def highlight_ref(s):
-        return ['background-color: #ffcccc' if s[REFERENCE_COL] == site_ref else '' for _ in s]
+    def boldfirstlign(s):
+        return 'font-weight: bold'
+    """def highlight_ref(s):
+        return ['background-color: #ffcccc' if s[REFERENCE_COL] == site_ref else '' for _ in s]"""
 
     # Application des styles
     styled_df = (display_df.style
