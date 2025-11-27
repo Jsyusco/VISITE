@@ -246,7 +246,7 @@ with col2:
 
     # 2. Fonction pour colorer la ligne référence en rouge clair
     def boldfirstlign(s):
-        return ['font-weight: ExtraBold' if s[REFERENCE_COL] == site_ref else '' for _ in s]
+        return ['font-weight 900' if s[REFERENCE_COL] == site_ref else '' for _ in s]
    #def highlight_ref(s):
        # return ['background-color: #ffcccc' if s[REFERENCE_COL] == site_ref else '' for _ in s]
 
