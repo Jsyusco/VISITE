@@ -1,20 +1,20 @@
-# utils.py (Version Finale avec Styles Word Personnalisés et Gestion Photos)
+# utils.py
 import streamlit as st
 import pandas as pd
-import uuid
-import firebase_admin
-from firebase_admin import credentials, firestore
-from datetime import datetime
 import numpy as np
+import uuid
+import json
 import zipfile
-from io import BytesIO
 import io
 import urllib.parse
+from datetime import datetime
+from io import BytesIO
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.table import WD_ALIGN_VERTICAL
+[cite_start]from streamlit_gsheets import GSheetsConnection # [cite: 1]
 
 # --- CONSTANTES ---
 PROJECT_RENAME_MAP = {
@@ -43,41 +43,19 @@ SECTION_PHOTO_RULES = {
 COMMENT_ID = 100
 COMMENT_QUESTION = "Veuillez préciser pourquoi le nombre de photo partagé ne correspond pas au minimum attendu"
 
-# --- INITIALISATION FIREBASE ---
-def initialize_firebase():
-    if not firebase_admin._apps:
-        try:
-            cred_dict = {
-                "type": st.secrets["firebase_type"],
-                "project_id": st.secrets["firebase_project_id"],
-                "private_key_id": st.secrets["firebase_private_key_id"],
-                "private_key": st.secrets["firebase_private_key"].replace('\\n', '\n'),
-                "client_email": st.secrets["firebase_client_email"],
-                "client_id": st.secrets["firebase_client_id"],
-                "auth_uri": st.secrets["firebase_auth_uri"],
-                "token_uri": st.secrets["firebase_token_uri"],
-                "auth_provider_x509_cert_url": st.secrets["firebase_auth_provider_x509_cert_url"],
-                "client_x509_cert_url": st.secrets["firebase_client_x509_cert_url"],
-                "universe_domain": st.secrets["firebase_universe_domain"],
-            }
-            project_id = cred_dict["project_id"]
-            cred = credentials.Certificate(cred_dict)
-            firebase_admin.initialize_app(cred, {'projectId': project_id})
-        except Exception as e:
-            st.error(f"Erreur de connexion Firebase : {e}")
-            st.stop() 
-    return firestore.client()
-
-db = initialize_firebase()
+# --- CONNEXION GOOGLE SHEETS ---
+def get_db_connection():
+    return st.connection("gsheets", type=GSheetsConnection)
 
 # --- CHARGEMENT DONNÉES ---
-@st.cache_data(ttl=3600)
-def load_form_structure_from_firestore():
+@st.cache_data(ttl=600)
+def load_form_structure_from_sheets():
     try:
-        docs = db.collection('formsquestions').order_by('id').get()
-        data = [doc.to_dict() for doc in docs]
-        if not data: return None
-        df = pd.DataFrame(data)
+        conn = get_db_connection()
+        # Lecture de l'onglet 'Questions'
+        df = conn.read(worksheet="Questions") 
+        
+        # Nettoyage des colonnes
         df.columns = df.columns.str.strip()
         
         rename_map = {'Conditon value': 'Condition value', 'condition value': 'Condition value', 'Condition Value': 'Condition value', 'Condition': 'Condition value', 'Conditon on': 'Condition on', 'condition on': 'Condition on'}
@@ -97,24 +75,22 @@ def load_form_structure_from_firestore():
             df[col] = df[col].astype(str).str.strip()
         return df
     except Exception as e:
-        st.error(f"Erreur lors du chargement de la structure du formulaire: {e}")
+        st.error(f"Erreur chargement structure (Sheet 'Questions'): {e}")
         return None
 
 @st.cache_data(ttl=3600)
-def load_site_data_from_firestore():
+def load_site_data_from_sheets():
     try:
-        docs = db.collection('Sites').get()
-        data = [doc.to_dict() for doc in docs]
-        if not data: return None
-        df_site = pd.DataFrame(data)
+        conn = get_db_connection()
+        # Lecture de l'onglet 'Sites'
+        df_site = conn.read(worksheet="Sites")
         df_site.columns = df_site.columns.str.strip()
         return df_site
     except Exception as e:
-        st.error(f"Erreur lors du chargement des données des sites: {e}")
+        st.error(f"Erreur chargement sites (Sheet 'Sites'): {e}")
         return None
 
-# --- LOGIQUE MÉTIER ---
-
+# --- LOGIQUE MÉTIER (Inchangée) ---
 def get_expected_photo_count(section_name, project_data):
     if section_name.strip() not in SECTION_PHOTO_RULES:
         return None, None 
@@ -246,11 +222,9 @@ def validate_section(df_questions, section_name, answers, collected_data, projec
 
     return len(missing) == 0, missing
 
-# --- SAUVEGARDE ET EXPORTS ---
+# --- SAUVEGARDE ET EXPORTS (Modifié pour Sheets) ---
 
 def define_custom_styles(doc):
-    """Définit et configure les trois styles de mise en forme."""
-    # 1. Report Title
     try: title_style = doc.styles.add_style('Report Title', WD_STYLE_TYPE.PARAGRAPH)
     except: title_style = doc.styles['Report Title']
     title_font = title_style.font
@@ -259,7 +233,6 @@ def define_custom_styles(doc):
     title_style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
     title_style.paragraph_format.space_after = Pt(20)
 
-    # 2. Report Subtitle
     try: subtitle_style = doc.styles.add_style('Report Subtitle', WD_STYLE_TYPE.PARAGRAPH)
     except: subtitle_style = doc.styles['Report Subtitle']
     subtitle_font = subtitle_style.font
@@ -267,7 +240,6 @@ def define_custom_styles(doc):
     subtitle_font.color.rgb = RGBColor(0x00, 0x56, 0x47)
     subtitle_style.paragraph_format.space_after = Pt(10)
 
-    # 3. Report Text
     try: text_style = doc.styles.add_style('Report Text', WD_STYLE_TYPE.PARAGRAPH)
     except: text_style = doc.styles['Report Text']
     text_font = text_style.font
@@ -275,14 +247,11 @@ def define_custom_styles(doc):
     text_style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
 def create_word_report(collected_data, df_struct, project_data, form_start_time):
-    """Génère le rapport Word complet avec styles et photos."""
     doc = Document()
     define_custom_styles(doc)
     
-    # En-tête
     doc.add_paragraph('Rapport d\'Audit Chantier', style='Report Title')
 
-    # Informations Projet
     doc.add_paragraph('Informations du Projet', style='Report Subtitle')
     project_table = doc.add_table(rows=3, cols=2)
     project_table.style = 'Light Grid Accent 1'
@@ -312,19 +281,16 @@ def create_word_report(collected_data, df_struct, project_data, form_start_time)
     
     doc.add_page_break()
     
-    # Phases et Questions
     for phase_idx, phase in enumerate(collected_data):
         doc.add_paragraph(f'Phase: {phase["phase_name"]}', style='Report Subtitle')
         
         for q_id, answer in phase['answers'].items():
-            # Texte question
             if int(q_id) == COMMENT_ID:
                 q_text = COMMENT_QUESTION
             else:
                 q_row = df_struct[df_struct['id'].astype(int) == int(q_id)]
                 q_text = q_row.iloc[0]['question'] if not q_row.empty else f"ID {q_id}"
             
-            # Traitement Photos
             is_photo = (isinstance(answer, list) and answer and hasattr(answer[0], 'read')) or hasattr(answer, 'read')
             
             if is_photo:
@@ -342,7 +308,6 @@ def create_word_report(collected_data, df_struct, project_data, form_start_time)
                     except: doc.add_paragraph(f"[Erreur Photo {idx+1}]", style='Report Text')
                 doc.add_paragraph()
             else:
-                # Texte / Sélection
                 t = doc.add_table(rows=1, cols=2)
                 t.style = 'Light Grid Accent 1'
                 t.cell(0,0).text = f'Q{q_id}: {q_text}'
@@ -361,11 +326,20 @@ def create_word_report(collected_data, df_struct, project_data, form_start_time)
     return buf
 
 def save_form_data(collected_data, project_data, submission_id, start_time):
+    """
+    Sauvegarde une nouvelle ligne dans l'onglet 'Reponses' du Google Sheet.
+    Les données complexes sont sérialisées en JSON.
+    NOTE: Les photos ne sont PAS uploadées dans le Sheet. Seuls les noms de fichiers sont conservés.
+    """
     try:
+        conn = get_db_connection()
+        
+        # 1. Nettoyage et conversion des données pour le JSON
         cleaned_data = []
         for phase in collected_data:
             clean_phase = {"phase_name": phase["phase_name"], "answers": {}}
             for k, v in phase["answers"].items():
+                # Transformation des objets fichiers en chaînes de caractères (noms)
                 if isinstance(v, list) and v and hasattr(v[0], 'read'): 
                     file_names = ", ".join([f.name for f in v])
                     clean_phase["answers"][str(k)] = f"Fichiers: {file_names}"
@@ -375,19 +349,23 @@ def save_form_data(collected_data, project_data, submission_id, start_time):
                     clean_phase["answers"][str(k)] = v
             cleaned_data.append(clean_phase)
         
-        final_document = {
-            "project_intitule": project_data.get('Intitulé', 'N/A'),
-            "project_details": project_data,
-            "submission_id": submission_id,
-            "start_date": start_time,
-            "submission_date": datetime.now(),
-            "status": "Completed",
-            "collected_phases": cleaned_data
-        }
-        doc_id_base = str(project_data.get('Intitulé', 'form')).replace(" ", "_").replace("/", "_")[:20]
-        doc_id = f"{doc_id_base}_{datetime.now().strftime('%Y%m%d_%H%M')}_{submission_id[:6]}"
-        db.collection('FormAnswers').document(doc_id).set(final_document)
-        return True, doc_id 
+        json_dump = json.dumps(cleaned_data, ensure_ascii=False)
+        
+        # 2. Création de la ligne à insérer
+        new_row = pd.DataFrame([{
+            "ID": submission_id,
+            "Date": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "Projet": project_data.get('Intitulé', 'N/A'),
+            "Donnees_JSON": json_dump
+        }])
+        
+        # 3. Ajout à la feuille existante
+        # Note : st-gsheets lit tout, ajoute, et réécrit.
+        existing_data = conn.read(worksheet="Reponses")
+        updated_df = pd.concat([existing_data, new_row], ignore_index=True)
+        conn.update(worksheet="Reponses", data=updated_df)
+        
+        return True, submission_id 
     except Exception as e:
         return False, str(e)
 
@@ -414,7 +392,7 @@ def create_zip_export(collected_data):
     buf.seek(0)
     return buf
 
-# --- COMPOSANT UI ---
+# --- COMPOSANT UI (Inchangé) ---
 def render_question(row, answers, phase_name, key_suffix, loop_index, project_data):
     q_id = int(row.get('id', 0))
     is_dynamic_comment = (q_id == COMMENT_ID)
