@@ -4,7 +4,7 @@ import pandas as pd
 import uuid
 import urllib.parse
 from datetime import datetime
-import utils # Import du nouveau utils.py
+import tools as utils
 
 # --- CONFIGURATION ET STYLE (Inchangé) ---
 st.set_page_config(page_title="Formulaire Dynamique - Sheets", layout="centered")
