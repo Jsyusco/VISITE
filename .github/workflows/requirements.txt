@@ -1,7 +1,11 @@
+# --- Bibliothèques Core ---
 streamlit
-folium
 pandas
 numpy
-datetime
-streamlit_folium
-openpyxl
+
+# --- Base de données ---
+firebase-admin
+
+# --- Génération de fichiers ---
+# Attention : le package s'appelle 'python-docx' et non 'docx'
+python-docx
