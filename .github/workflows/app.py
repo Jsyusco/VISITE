@@ -1,17 +1,14 @@
+# app.py
 import streamlit as st
 import pandas as pd
 import uuid
 import urllib.parse
 from datetime import datetime
+import utils # Import du nouveau utils.py
 
-# Import des fonctions et constantes depuis utils.py
-# (Assurez-vous que utils.py est dans le même répertoire)
-import utils
+# --- CONFIGURATION ET STYLE (Inchangé) ---
+st.set_page_config(page_title="Formulaire Dynamique - Sheets", layout="centered")
 
-# --- CONFIGURATION ET STYLE ---
-st.set_page_config(page_title="Formulaire Dynamique - Firestore", layout="centered")
-
-# CSS pour le thème sombre et les couleurs spécifiques
 st.markdown("""
 <style>
     .stApp { background-color: #121212; color: #e0e0e0; }
@@ -29,9 +26,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- GESTION DE L'ÉTAT ---
+# --- GESTION DE L'ÉTAT (Inchangé) ---
 def init_session_state():
-    """Initialise l'état de session avec les valeurs par défaut."""
     defaults = {
         'step': 'PROJECT_LOAD',
         'project_data': None,
@@ -61,11 +57,14 @@ st.markdown('<div class="main-header"><h1>📝Formulaire Chantier </h1></div>', 
 
 # 1. CHARGEMENT
 if st.session_state['step'] == 'PROJECT_LOAD':
-    st.info("Tentative de chargement de la structure des formulaires...")
-    with st.spinner("Chargement en cours..."):
-        df_struct = utils.load_form_structure_from_firestore()
-        utils.load_site_data_from_firestore.clear() 
-        df_site = utils.load_site_data_from_firestore()
+    st.info("Chargement des données depuis Google Sheets...")
+    with st.spinner("Connexion en cours..."):
+        # Nettoyage cache pour être sûr d'avoir les dernières questions
+        utils.load_form_structure_from_sheets.clear()
+        utils.load_site_data_from_sheets.clear()
+        
+        df_struct = utils.load_form_structure_from_sheets()
+        df_site = utils.load_site_data_from_sheets()
         
         if df_struct is not None and df_site is not None:
             st.session_state['df_struct'] = df_struct
@@ -73,14 +72,12 @@ if st.session_state['step'] == 'PROJECT_LOAD':
             st.session_state['step'] = 'PROJECT'
             st.rerun()
         else:
-            st.error("Impossible de charger les données. Vérifiez votre connexion et les secrets Firebase.")
+            st.error("Impossible de charger les données. Vérifiez l'URL du Sheet et les noms des onglets ('Questions', 'Sites').")
             if st.button("Réessayer le chargement"):
-                utils.load_form_structure_from_firestore.clear() 
-                utils.load_site_data_from_firestore.clear() 
                 st.session_state['step'] = 'PROJECT_LOAD'
                 st.rerun()
 
-# 2. SELECTION PROJET
+# 2. SELECTION PROJET (Inchangé)
 elif st.session_state['step'] == 'PROJECT':
     df_site = st.session_state['df_site']
     st.markdown("### 🏗️ Sélection du Chantier")
@@ -117,18 +114,14 @@ elif st.session_state['step'] == 'PROJECT':
                 st.session_state['last_validation_errors'] = None
                 st.rerun()
 
-# 3. IDENTIFICATION
+# 3. IDENTIFICATION (Inchangé)
 elif st.session_state['step'] == 'IDENTIFICATION':
     df = st.session_state['df_struct']
     ID_SECTION_NAME = df['section'].iloc[0]
     st.markdown(f"### 👤 Étape unique : {ID_SECTION_NAME}")
     
     identification_questions = df[df['section'] == ID_SECTION_NAME].copy()
-    
-    # 1. Assurer que l'ID est numérique
     identification_questions['id_temp'] = pd.to_numeric(identification_questions['id'], errors='coerce').fillna(0)
-    
-    # 2. Trier par ID numérique croissant pour la logique conditionnelle
     identification_questions = identification_questions.sort_values(by='id_temp')
 
     if st.session_state['id_rendering_ident'] is None: st.session_state['id_rendering_ident'] = str(uuid.uuid4())
@@ -138,27 +131,20 @@ elif st.session_state['step'] == 'IDENTIFICATION':
         if utils.check_condition(row, st.session_state['current_phase_temp'], st.session_state['collected_data']):
             utils.render_question(row, st.session_state['current_phase_temp'], ID_SECTION_NAME, rendering_id, idx, st.session_state['project_data'])
             
-
-    # --- AFFICHAGE PERSISTANT DES ERREURS DE VALIDATION (IDENTIFICATION) ---
     if st.session_state['last_validation_errors']:
         st.markdown(
             f'<div class="error-box"><b>⚠️ Erreur de validation :</b><br>Les questions suivantes nécessitent une réponse ou une correction :<br>{st.session_state["last_validation_errors"]}</div>', 
             unsafe_allow_html=True
         )
-    # ------------------------------------------------------------------------
 
     st.markdown("---")
     if st.button("✅ Valider l'identification"):
-        st.session_state['last_validation_errors'] = None # Réinitialisation à la tentative de validation
-        
-        # --- CORRECTION ROBUSTESSE IDENTIFICATION (Vérification df_struct) ---
+        st.session_state['last_validation_errors'] = None
         df_struct = st.session_state.get('df_struct')
         if df_struct is None:
             st.error("Structure du formulaire manquante. Veuillez recharger le projet.")
-            st.rerun() # <--- CORRECTION ICI
-        # --------------------------------------------------------------------
+            st.rerun()
         
-        # NOTE: On n'utilise pas le try/except ici pour ne pas masquer d'erreur dans l'étape initiale
         is_valid, errors = utils.validate_section(df_struct, ID_SECTION_NAME, st.session_state['current_phase_temp'], st.session_state['collected_data'], st.session_state['project_data'])
         
         if is_valid:
@@ -172,22 +158,18 @@ elif st.session_state['step'] == 'IDENTIFICATION':
             st.success("Identification validée.")
             st.rerun()
         else:
-            # --- CORRECTION ROBUSTESSE D'ERREUR V2 ---
             cleaned_errors = [str(e) for e in errors if e is not None]
-
             html_errors = '<br>'.join([f"- {e}" for e in cleaned_errors])
             st.session_state['last_validation_errors'] = html_errors
-            st.rerun() # <--- CORRECTION ICI
-            # -----------------------------------------
+            st.rerun()
 
-# 4. BOUCLE PHASES
+# 4. BOUCLE PHASES (Inchangé)
 elif st.session_state['step'] in ['LOOP_DECISION', 'FILL_PHASE']:
     project_intitule = st.session_state['project_data'].get('Intitulé', 'Projet Inconnu')
     with st.expander(f"📍 Projet : {project_intitule}", expanded=False):
         project_details = st.session_state['project_data']
         st.markdown(":orange-badge[**Détails du Projet sélectionné :**]")
         
-        # Affichage des détails du projet (récupéré des données 'Sites')
         with st.container(border=True):
             st.markdown("**Informations générales**")
             cols1 = st.columns([1, 1, 1]) 
@@ -241,7 +223,6 @@ elif st.session_state['step'] in ['LOOP_DECISION', 'FILL_PHASE']:
         df = st.session_state['df_struct']
         ID_SECTION_NAME = df['section'].iloc[0]
         ID_SECTION_CLEAN = str(ID_SECTION_NAME).strip().lower()
-        # Exclure la section d'identification et la ligne de question 'phase' si elle existe
         SECTIONS_TO_EXCLUDE_CLEAN = {ID_SECTION_CLEAN, "phase"} 
         all_sections_raw = df['section'].unique().tolist()
         available_phases = []
@@ -282,7 +263,6 @@ elif st.session_state['step'] in ['LOOP_DECISION', 'FILL_PHASE']:
             visible_count = 0
             for idx, (index, row) in enumerate(section_questions.iterrows()):
                 if int(row.get('id', 0)) == utils.COMMENT_ID: continue
-                
                 if utils.check_condition(row, st.session_state['current_phase_temp'], st.session_state['collected_data']):
                     utils.render_question(row, st.session_state['current_phase_temp'], current_phase, st.session_state['iteration_id'], idx, st.session_state['project_data'])
                     visible_count += 1
@@ -296,13 +276,11 @@ elif st.session_state['step'] in ['LOOP_DECISION', 'FILL_PHASE']:
                 comment_row = pd.Series({'id': utils.COMMENT_ID, 'type': 'text'}) 
                 utils.render_question(comment_row, st.session_state['current_phase_temp'], current_phase, st.session_state['iteration_id'], 999, st.session_state['project_data']) 
             
-            # --- AFFICHAGE PERSISTANT DES ERREURS DE VALIDATION (PHASE) ---
             if st.session_state['last_validation_errors']:
                 st.markdown(
                     f'<div class="error-box"><b>⚠️ Erreurs :</b><br>Les questions suivantes nécessitent une réponse ou une correction :<br>{st.session_state["last_validation_errors"]}</div>', 
                     unsafe_allow_html=True
                 )
-            # ------------------------------------------------------------------------
 
             st.markdown("---")
             c1, c2 = st.columns([1, 2])
@@ -318,15 +296,12 @@ elif st.session_state['step'] in ['LOOP_DECISION', 'FILL_PHASE']:
                     st.session_state['show_comment_on_error'] = False
                     st.session_state['last_validation_errors'] = None
 
-                    # --- CORRECTION ROBUSTESSE PHASE (Vérification df_struct) ---
                     df_struct = st.session_state.get('df_struct')
                     if df_struct is None:
                         st.error("Structure du formulaire manquante. Veuillez recharger le projet.")
-                        st.rerun() # <--- CORRECTION ICI
+                        st.rerun()
                         st.stop()
-                    # -------------------------------------------------------------
                     
-                    # --- NOUVEAU BLOC TRY/EXCEPT POUR ISOLER L'ATTRIBUTERROR ---
                     try:
                         is_valid, errors = utils.validate_section(
                             df_struct, 
@@ -336,11 +311,10 @@ elif st.session_state['step'] in ['LOOP_DECISION', 'FILL_PHASE']:
                             st.session_state['project_data']
                         )
                     except AttributeError as e:
-                        # Si l'erreur se produit DANS la fonction de validation
-                        st.session_state['last_validation_errors'] = f"Erreur critique dans la validation (AttributeError) : {e}"
-                        st.error(f"Erreur interne : {e}. Veuillez contacter le support. (Code: ATTRIB-VALID)")
+                        st.session_state['last_validation_errors'] = f"Erreur critique dans la validation : {e}"
+                        st.error(f"Erreur interne : {e}. Veuillez contacter le support.")
                         st.session_state['show_comment_on_error'] = True 
-                        st.rerun() # <--- CORRECTION IMPORTANTE ICI (Ligne qui plantait)
+                        st.rerun()
                         st.stop()
 
                     if is_valid:
@@ -351,30 +325,24 @@ elif st.session_state['step'] in ['LOOP_DECISION', 'FILL_PHASE']:
                         st.session_state['last_validation_errors'] = None
                         st.rerun()
                     else:
-                        # --- CORRECTION ROBUSTESSE D'ERREUR V2 ---
                         cleaned_errors = [str(e) for e in errors if e is not None]
-
-                        # Vérifie si l'erreur est liée au manque de justification pour les photos
                         is_photo_error = any(f"Commentaire (ID {utils.COMMENT_ID})" in e for e in cleaned_errors)
                         if is_photo_error: st.session_state['show_comment_on_error'] = True
-                        
                         html_errors = '<br>'.join([f"- {e}" for e in cleaned_errors])
                         st.session_state['last_validation_errors'] = html_errors
-                        st.rerun() # <--- CORRECTION ICI
-                        # -----------------------------------------
+                        st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-# 5. FIN / EXPORTS
+# 5. FIN / EXPORTS (Inchangé)
 elif st.session_state['step'] == 'FINISHED':
     st.markdown("## 🎉 Formulaire Terminé")
     project_name = st.session_state['project_data'].get('Intitulé', 'Projet Inconnu')
     st.write(f"Projet : **{project_name}**")
     st.warning('Il est attendu que vous téléchargiez le rapport Word ci-dessous pour le transmettre à votre interlocuteur.', icon="⚠️")
     
-    
-    # 1. SAUVEGARDE FIREBASE
+    # 1. SAUVEGARDE GOOGLE SHEETS
     if not st.session_state['data_saved']:
-        with st.spinner("Sauvegarde des réponses dans Firestore..."):
+        with st.spinner("Sauvegarde des réponses dans Google Sheets..."):
             success, result_message = utils.save_form_data(
                 st.session_state['collected_data'], 
                 st.session_state['project_data'],
@@ -390,10 +358,9 @@ elif st.session_state['step'] == 'FINISHED':
                 if st.button("Réessayer la sauvegarde"):
                     st.rerun()
     else:
-        st.info(f"Les données sont sauvegardées dans Firestore (ID: {st.session_state.get('submission_id_final', 'N/A')})")
+        st.info(f"Les données sont sauvegardées dans Google Sheets (ID: {st.session_state.get('submission_id_final', 'N/A')})")
 
     if st.session_state['data_saved']:
-        # Préparation des exports
         csv_data = utils.create_csv_export(
             st.session_state['collected_data'], 
             st.session_state['df_struct'], 
@@ -404,33 +371,18 @@ elif st.session_state['step'] == 'FINISHED':
         zip_buffer = utils.create_zip_export(st.session_state['collected_data'])
         date_str = datetime.now().strftime('%Y%m%d_%H%M')
         
-        # --- 2. TÉLÉCHARGEMENT DIRECT ---
         st.markdown("### 📥 Télécharger les fichiers")
-        
         col_csv, col_zip, col_word = st.columns(3)
         
         file_name_csv = f"Export_{project_name}_{date_str}.csv"
         with col_csv:
-            st.download_button(
-                label="📄 CSV", 
-                data=csv_data, 
-                file_name=file_name_csv, 
-                mime='text/csv',
-                use_container_width=True
-            )
+            st.download_button("📄 CSV", csv_data, file_name_csv, 'text/csv', use_container_width=True)
 
         if zip_buffer:
             file_name_zip = f"Photos_{project_name}_{date_str}.zip"
             with col_zip:
-                st.download_button(
-                    label="📸 ZIP Photos", 
-                    data=zip_buffer.getvalue(), 
-                    file_name=file_name_zip, 
-                    mime='application/zip',
-                    use_container_width=True
-                )
+                st.download_button("📸 ZIP Photos", zip_buffer.getvalue(), file_name_zip, 'application/zip', use_container_width=True)
         
-        # Génération du rapport Word
         with st.spinner("Génération du rapport Word..."):
             try:
                 word_buffer = utils.create_word_report(
@@ -439,49 +391,21 @@ elif st.session_state['step'] == 'FINISHED':
                     st.session_state['project_data'],
                     st.session_state['form_start_time']
                 )
-                
                 file_name_word = f"Rapport_{project_name}_{date_str}.docx"
                 with col_word:
-                    st.download_button(
-                        label="📋 Rapport Word", 
-                        data=word_buffer.getvalue(), 
-                        file_name=file_name_word, 
-                        mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                        use_container_width=True
-                    )
+                    st.download_button("📋 Rapport Word", word_buffer.getvalue(), file_name_word, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', use_container_width=True)
             except Exception as e:
-                st.error(f"Erreur lors de la génération du rapport Word : {e}")
+                st.error(f"Erreur rapport Word : {e}")
     
-        # --- 3. OUVERTURE DE L'APPLICATION NATIVE (MAILTO) ---
         st.markdown("---")
         st.markdown("### 📧 Partager par Email")
-        st.info("💡 Téléchargez d'abord les fichiers ci-dessus, puis cliquez sur le bouton ci-dessous pour ouvrir votre application email.")
+        st.info("💡 Téléchargez d'abord les fichiers ci-dessus.")
         
         subject = f"Rapport Audit : {project_name}"
-        body = (
-            f"Bonjour,\n\n"
-            f"Veuillez trouver ci-joint le rapport d'audit pour le projet {project_name}.\n"
-            f"Fichiers à joindre :\n"
-            f"- {file_name_csv}\n"
-            f"- {file_name_zip}\n"
-            f"- {file_name_word}\n\n"
-            f"Cordialement."
-        )
+        body = f"Bonjour,\n\nVeuillez trouver ci-joint le rapport d'audit pour le projet {project_name}.\nFichiers à joindre :\n- {file_name_csv}\n- {file_name_zip}\n- {file_name_word}\n\nCordialement."
+        mailto_link = f"mailto:?subject={urllib.parse.quote(subject)}&body={urllib.parse.quote(body)}"
         
-        mailto_link = (
-            f"mailto:?" 
-            f"subject={urllib.parse.quote(subject)}" 
-            f"&body={urllib.parse.quote(body)}"
-        )
-        
-        st.markdown(
-            f'<a href="{mailto_link}" target="_blank" style="text-decoration: none;">'
-            f'<button style="background-color: #E9630C; color: white; border: none; padding: 10px 20px; border-radius: 8px; width: 100%; font-size: 16px; cursor: pointer;">'
-            f'📧 Ouvrir l\'application Email'
-            f'</button>'
-            f'</a>',
-            unsafe_allow_html=True
-        )
+        st.markdown(f'<a href="{mailto_link}" target="_blank" style="text-decoration: none;"><button style="background-color: #E9630C; color: white; border: none; padding: 10px 20px; border-radius: 8px; width: 100%; font-size: 16px; cursor: pointer;">📧 Ouvrir l\'application Email</button></a>', unsafe_allow_html=True)
 
     st.markdown("---")
     if st.button("🔄 Recommencer l'audit"):
